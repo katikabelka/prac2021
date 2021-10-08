@@ -31,6 +31,13 @@
 #include <com/sun/star/system/SystemShellExecuteFlags.hpp>
 #include <com/sun/star/system/XSystemShellExecute.hpp>
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/frame/XComponentLoader.hpp>
+#include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XLoaderFactory.hpp>
+#include <com/sun/star/text/XTextTable.hpp>
+#include <com/sun/star/table/XCell.hpp>
+#include <iostream>
 
 using namespace com::sun::star::awt;
 using namespace com::sun::star::frame;
@@ -217,45 +224,183 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
     {
         if ( aURL.Path == "GenButtonCmd" )
         {
-            // open the LibreOffice web page
-            ::rtl::OUString sURL("http://www.libreoffice.org");
-            Reference< XSystemShellExecute > xSystemShellExecute(
-                SystemShellExecute::create(mxContext) );
-            try
-            {
-                xSystemShellExecute->execute( sURL, ::rtl::OUString(), SystemShellExecuteFlags::URIS_ONLY );
+            Reference< ::com::sun::star::frame::XComponentLoader > xComponentLoader(mxFrame, UNO_QUERY);
+            const com::sun::star::uno::Sequence<com::sun::star::beans::PropertyValue> empty_args(0);
+            
+            auto newFrame = xComponentLoader->loadComponentFromURL("private:factory/swriter", "_blank", 0, empty_args);
+
+            Reference< ::com::sun::star::text::XTextDocument > xTextDocument(newFrame, UNO_QUERY);
+            sal_uInt32 arr[100000];
+            sal_uInt32 c;
+            std::stringstream ss;
+            ss << maComboBoxText;
+            ss >> maxlength;
+            if (!maxlength) {
+                maxlength = 1;
             }
-            catch( Exception& rEx )
-            {
-                (void)rEx;
-            }
+            int cnt = 0;
+            rtl::OUString ans;
+            bool start = false;
+            int chance;
+            rtl::OUString cur_lay = "Ru";
+            for (int i = 0; i < numwords; i++) {
+                cnt = std::rand()% maxlength + 1;
+                if (layout.compareTo(rtl::OUString("Mix")) == 0) {
+                    chance = std::rand() % 2;
+                    if (chance) {
+                        cur_lay = "Ru";
+                    } else {
+                        cur_lay = "En";
+                    }
+                } else {
+                    cur_lay = layout;
+                }
+
+                if (cur_lay.compareTo(rtl::OUString("En")) == 0) {
+                    for (int i = 0; i < cnt; i++) {
+                        c = std::rand()% 26;
+                        sal_Unicode t = 'a' + c;
+                       ans += rtl::OUString(t);
+                    }
+                } else if (cur_lay.compareTo(rtl::OUString("Ru")) == 0) {
+                    for (int i = 0; i < cnt; i++) {
+                        c = std::rand()% 32;
+                        if (c == 31) {
+                            sal_Unicode t = L'ё';
+                            ans += rtl::OUString(L'ё');
+                        }
+                        sal_Unicode t = L'а' + c;
+                        ans += rtl::OUString(t);
+                    }
+                }
+                ans += " ";
+            } 
+            xTextDocument->getText()->setString(ans);
         }
         else if ( aURL.Path == "StatButtonCmd" )
         {
-            ::rtl::OUString sURL("http://www.google.com");
-            Reference< XSystemShellExecute > xSystemShellExecute(
-                SystemShellExecute::create(mxContext) );
-            try
-            {
-                xSystemShellExecute->execute( sURL, ::rtl::OUString(), SystemShellExecuteFlags::URIS_ONLY );
+            auto doc = mxFrame->getController()->getModel();
+            Reference< ::com::sun::star::text::XTextDocument > xTextDocument(doc, UNO_QUERY);
+            auto xText = xTextDocument->getText();
+            auto txt = xText->getString();
+            int32_t len = txt.getLength();
+            bool enword = false, ruword = false;
+            int32_t now = 0;
+            std::map <int32_t, int32_t> stat;
+            for (int32_t i = 0; i < len; i++) {
+                if (txt[i] >='A' && txt[i] <= 'Z' || txt[i] >= 'a' && txt[i] <= 'z') {
+                    if (!enword) {
+                        enword = true;
+                        now = 1;
+                    }
+                    else {
+                        now++;
+                    }
+                } else {
+                    if (enword) {
+                        enword = false;
+                        if (stat.find(now) == stat.end()) {
+                            stat.insert(std::pair<int32_t, int32_t>(now, 1));
+                        } else {
+                            stat[now] += 1;
+                        }
+                    }
+                }
+                if (txt[i] >= L'А' && txt[i] <= L'Я' || txt[i] >= L'а' && txt[i] <= L'я' || txt[i] == L'ё' || txt[i] == L'Ё') {
+                    if (!ruword) {
+                        ruword = true;
+                        now = 1;
+                    }
+                    else {
+                        now++;
+                    }
+                } else {
+                    if (ruword) {
+                        ruword = false;
+                        if (stat.find(now) == stat.end()) {
+                            stat.insert(std::pair<int32_t, int32_t>(now, 1));
+                        } else {
+                            stat[now] += 1;
+                        }
+                    }
+                }
             }
-            catch( Exception& rEx )
-            {
-                (void)rEx;
+            if (ruword || enword) {
+                if (stat.find(now) == stat.end()) {
+                    stat.insert(std::pair<int32_t, int32_t>(now, 1));
+                } else {
+                    stat[now] += 1;
+                }
             }
+            
+            Reference<com::sun::star::lang::XMultiServiceFactory> xMultiServiceFactory (xTextDocument, UNO_QUERY);
+            Reference <com::sun::star::text::XTextTable> xTextTable (xMultiServiceFactory->createInstance("com.sun.star.text.TextTable"),UNO_QUERY);
+            xTextTable -> initialize(stat.size() + 1, 2);
+            Reference <com::sun::star::text::XTextContent> xTextContent (xTextTable, UNO_QUERY);
+            xText -> insertTextContent(xText->getEnd(), xTextContent, 0);
+            auto fields = xTextTable->getCellNames();
+
+            auto fld = xTextTable->getCellByName(fields[0]);
+            Reference<com::sun::star::text::XText> xTextFld1(fld, UNO_QUERY);
+            auto cursor = xTextFld1->createTextCursor();
+            cursor->setString("Length of the word");
+
+            fld = xTextTable->getCellByName(fields[1]);
+            Reference<com::sun::star::text::XText> xTextFld2(fld, UNO_QUERY);
+            cursor = xTextFld2->createTextCursor();
+            cursor->setString("Number of words");
+
+            sal_Int64 i = 2;
+        
+            for (auto it = stat.begin(); it != stat.end(); ++it) {
+                auto fld = xTextTable->getCellByName(fields[i]);
+                fld->setValue((*it).first);
+                i++;
+                fld = xTextTable->getCellByName(fields[i]);
+                fld->setValue((*it).second);
+                i++;
+            }
+
+
         }
         else if ( aURL.Path == "CheckButtonCmd" )
         {
-            ::rtl::OUString sURL("http://www.yandex.ru");
-            Reference< XSystemShellExecute > xSystemShellExecute(
-                SystemShellExecute::create(mxContext) );
-            try
-            {
-                xSystemShellExecute->execute( sURL, ::rtl::OUString(), SystemShellExecuteFlags::URIS_ONLY );
-            }
-            catch( Exception& rEx )
-            {
-                (void)rEx;
+            auto doc = mxFrame->getController()->getModel();
+            Reference< ::com::sun::star::text::XTextDocument > xTextDocument(doc, UNO_QUERY);
+            auto xText = xTextDocument->getText();
+            auto cursor = xText -> createTextCursor();
+            Reference <com::sun::star::beans::XPropertySet> xPropertySet(cursor, UNO_QUERY);
+            ::rtl::OUString str;
+            sal_Unicode c;
+            bool en = false;
+            std::size_t cnt = 0;
+            std::size_t total_length = (xText->getString()).getLength();
+            Reference <::com::sun::star::beans::XPropertySet> xCursorProps(cursor, UNO_QUERY);
+            while(cursor->goRight(1, true)) {
+                std::size_t curlen = 0;
+                auto tmp = (cursor->getString())[curlen];
+                while (curlen < (total_length - cnt) && (tmp >='A' && tmp <= 'Z' || tmp >= 'a' && tmp <= 'z' ) ) {
+                    cursor->goRight(1, true);
+                    curlen++;
+                    tmp = (cursor->getString())[curlen];
+                }
+                if (curlen != (total_length - cnt)) {
+                    cursor->goLeft(1, true);
+                }
+                auto txt = cursor->getString();
+                size_t size = txt.getLength();
+                for (int i = 0; i < size; i++) {
+                    if (txt[i] >='A' && txt[i] <= 'Z' || txt[i] >= 'a' && txt[i] <= 'z') {
+                        xCursorProps->setPropertyValue("CharBackColor", Any(0xFF0000));
+                        break;
+                    }
+                }
+                if (cursor->goRight(1, true)) {
+                    cursor->collapseToEnd();
+                    cnt += curlen + 1;
+                } else {
+                    break;
+                }
             }
         }
         else if ( aURL.Path == "ComboboxCmd" )
@@ -273,6 +418,15 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
             aInsertArgs[1].Name = rtl::OUString( "Text" );
             aInsertArgs[1].Value <<= maComboBoxText;
             SendCommand( aURL, ::rtl::OUString("InsertEntry"), aInsertArgs, sal_True );
+
+            for (auto i = 0; i < lArgs.getLength(); i++)
+            {
+                if (lArgs[i].Name == "Text") {
+                    rtl::OUString sub_num;
+                    lArgs[i].Value >>= sub_num;
+                    maxlength = sub_num.toInt32();
+                }
+            }
         }
         else if ( aURL.Path == "InsertEntry" )
         {
@@ -299,9 +453,9 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
             aArgs[0].Value <<= aText;
             SendCommand( aCmdURL, ::rtl::OUString( "SetText" ), aArgs, sal_True );
         }
-       
         else if ( aURL.Path == "SpinfieldCmd" )
         {
+            lArgs[1].Value >>= numwords;
         }
         else if ( aURL.Path == "DropdownboxCmd" )
         {
@@ -312,6 +466,7 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
                 if ( lArgs[i].Name == "Text" )
                 {
                     lArgs[i].Value >>= aText;
+                    lArgs[i].Value >>= layout;
                     break;
                 }
             }
@@ -375,11 +530,10 @@ void SAL_CALL BaseDispatch::addStatusListener( const Reference< XStatusListener 
             Sequence< NamedValue > aArgs( 1 );
 
             // send command to set context menu content
-            Sequence< rtl::OUString > aContextMenu( 4 );
-            aContextMenu[0] = "Command 1";
-            aContextMenu[1] = "Command 2";
-            aContextMenu[2] = "Command 3";
-            aContextMenu[3] = "Command 4";
+            Sequence< rtl::OUString > aContextMenu( 3 );
+            aContextMenu[0] = "Ru";
+            aContextMenu[1] = "En";
+            aContextMenu[2] = "Mix";
 
             aArgs[0].Name = "List";
             aArgs[0].Value <<= aContextMenu;
@@ -423,7 +577,7 @@ void SAL_CALL BaseDispatch::addStatusListener( const Reference< XStatusListener 
             aArgs[0].Name = "Value";
             aArgs[0].Value <<= int( 0 );
             aArgs[1].Name = "UpperLimit";
-            aArgs[1].Value <<= int( 20 );
+            aArgs[1].Value <<= int( 100000);
             aArgs[2].Name = "LowerLimit";
             aArgs[2].Value <<= int( 0 );
             aArgs[3].Name = "Step";
@@ -479,7 +633,6 @@ void SAL_CALL BaseDispatch::controlEvent( const ControlEvent& Event ) throw (Run
                         break;
                     }
                 }
-
                 if ( bHasText )
                     maComboBoxText = aNewText;
             }
@@ -494,6 +647,7 @@ BaseDispatch::BaseDispatch( const Reference< XComponentContext > &rxContext,
         , mxFrame( xFrame )
         , msDocService( rServiceName )
         , mbButtonEnabled( sal_True )
+        , layout("Ru")
 {
 }
 

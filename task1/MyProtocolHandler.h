@@ -113,6 +113,11 @@ protected:
     ::rtl::OUString msDocService;
     ::rtl::OUString maComboBoxText;
     sal_Bool        mbButtonEnabled;
+    int maxlength;
+    long numwords;
+    ::rtl::OUString layout;
+
+
 
 public:
     BaseDispatch( const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XComponentContext > &rxContext,
