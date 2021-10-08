@@ -50,7 +50,7 @@
                         <value>vnd.demo.complextoolbarcontrols.demoaddon:SpinfieldCmd</value>
                     </prop>
                     <prop oor:name="Title" oor:type="xs:string">
-                        <value xml:lang="en-US">Number of words</value>
+                        <value xml:lang="en-US">Number of words for our generator</value>
                     </prop>
                     <prop oor:name="Target" oor:type="xs:string">
                         <value>_self</value>

@@ -235,8 +235,8 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
             std::stringstream ss;
             ss << maComboBoxText;
             ss >> maxlength;
-            if (!maxlength) {
-                maxlength = 1;
+            if (maxlength <= 0) {
+                std::cerr << "Incorrect maxlength" << std::endl;
             }
             int cnt = 0;
             rtl::OUString ans;
@@ -379,21 +379,29 @@ void SAL_CALL BaseDispatch::dispatch( const URL& aURL, const Sequence < Property
             while(cursor->goRight(1, true)) {
                 std::size_t curlen = 0;
                 auto tmp = (cursor->getString())[curlen];
-                while (curlen < (total_length - cnt) && (tmp >='A' && tmp <= 'Z' || tmp >= 'a' && tmp <= 'z' ) ) {
+                while (curlen < (total_length - cnt) && ((tmp >='A' && tmp <= 'Z') || (tmp >= 'a' && tmp <= 'z')  || (tmp >= L'А' && tmp <= L'Я') || (tmp >= L'а' && tmp <= L'я') || (tmp == L'ё' || tmp == L'Ё'))) {
                     cursor->goRight(1, true);
                     curlen++;
-                    tmp = (cursor->getString())[curlen];
+                    if (curlen != (total_length - cnt)) {
+                        tmp = (cursor->getString())[curlen];
+                    } else {
+                        break;
+                    }
                 }
+                //cursor->goLeft(1, true);
                 if (curlen != (total_length - cnt)) {
                     cursor->goLeft(1, true);
                 }
                 auto txt = cursor->getString();
                 size_t size = txt.getLength();
+                bool en = false;
                 for (int i = 0; i < size; i++) {
                     if (txt[i] >='A' && txt[i] <= 'Z' || txt[i] >= 'a' && txt[i] <= 'z') {
-                        xCursorProps->setPropertyValue("CharBackColor", Any(0xFF0000));
-                        break;
+                        en = true;
                     }
+                }
+                if (en) {
+                    xCursorProps->setPropertyValue("CharBackColor", Any(0xFF0000));
                 }
                 if (cursor->goRight(1, true)) {
                     cursor->collapseToEnd();
